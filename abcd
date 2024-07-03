@@ -8,28 +8,15 @@ scriptsPath="/usr/share/abcd/abc.d"
 nextInitFile="/usr/share/abcd/abcd.nextInit.conf"
 defaultNextInit="/lib/systemd/systemd"
 
-# Run scripts
-run_scripts() {
-  local path="$1"
-  scripts=($(ls -v "$path"/*))
-
-  for i in "${!scripts[@]}"; do
-    script="${scripts[$i]}"
-    if [[ -x "$script" ]]; then
-      echo "[$((i+1))/${#scripts[@]}] Running script: $script"
-      "$script"
-      if [[ $? -ne 0 ]]; then
-        echo "Error running script: $script"
-        exit 1
-      fi
-    else
-      echo "Skipping non-executable script: $script"
-    fi
-  done
+log() {
+  local level="$1"
+  local message="$2"
+  echo "[abcd] ($level): $message"
+  echo "[abcd] ($level): $message" > /dev/kmsg
 }
 
-# Execute next init
-exec_next_init() {
+# Check if next init is executable
+check_next_init() {
   local init_path
   if [[ -f "$nextInitFile" && -s "$nextInitFile" ]]; then
     init_path=$(cat "$nextInitFile" | xargs)
@@ -37,10 +24,56 @@ exec_next_init() {
     init_path="$defaultNextInit"
   fi
 
-  echo "Executing next init: $init_path"
+  if [[ ! -x "$init_path" ]]; then
+    log "err" "Next init system $init_path does not exist or is not executable"
+    exit 1
+  fi
+
+  echo "$init_path"
+}
+
+# Run hooks
+run_hooks() {
+  local path="$1"
+  
+  if [[ ! -d "$path" ]]; then
+    log "err" "Hooks path $path does not exist or is not a directory"
+    return
+  fi
+  
+  hooks=($(ls -v "$path"/* 2>/dev/null))
+
+  if [[ ${#hooks[@]} -eq 0 ]]; then
+    log "warn" "No hooks found in $path"
+    return
+  fi
+
+  for i in "${!hooks[@]}"; do
+    hook="${hooks[$i]}"
+    if [[ -x "$hook" ]]; then
+      log "info" "[$((i+1))/${#hooks[@]}] Running hook: $hook"
+      "$hook"
+      if [[ $? -ne 0 ]]; then
+        log "err" "Error running hook: $hook"
+        exit 1
+      else
+        log "info" "Successfully ran hook: $hook"
+      fi
+    else
+      log "err" "Hook is not executable: $hook"
+      exit 1
+    fi
+  done
+}
+
+# Execute next init
+exec_next_init() {
+  local init_path="$1"
+  log "info" "Executing next init: $init_path"
   exec "$init_path"
 }
 
 # Main execution
-run_scripts "$scriptsPath"
-exec_next_init
+next_init=$(check_next_init)
+run_hooks "$scriptsPath"
+exec_next_init "$next_init"
