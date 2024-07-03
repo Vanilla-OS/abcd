@@ -1,4 +1,10 @@
 #!/bin/bash
+#
+# abcd is a simple init system in bash for critical operations that must run
+# before the actual init system.
+#
+# Licensed under the GNU GPL v3.0
+# https://www.gnu.org/licenses/gpl-3.0.html
 
 set -o errexit
 set -o nounset
