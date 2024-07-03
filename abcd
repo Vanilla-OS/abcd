@@ -1,0 +1,46 @@
+#!/bin/bash
+
+set -o errexit
+set -o nounset
+set -o xtrace
+
+scriptsPath="/usr/share/abcd/abc.d"
+nextInitFile="/usr/share/abcd/abcd.nextInit.conf"
+defaultNextInit="/lib/systemd/systemd"
+
+# Run scripts
+run_scripts() {
+  local path="$1"
+  scripts=($(ls -v "$path"/*))
+
+  for i in "${!scripts[@]}"; do
+    script="${scripts[$i]}"
+    if [[ -x "$script" ]]; then
+      echo "[$((i+1))/${#scripts[@]}] Running script: $script"
+      "$script"
+      if [[ $? -ne 0 ]]; then
+        echo "Error running script: $script"
+        exit 1
+      fi
+    else
+      echo "Skipping non-executable script: $script"
+    fi
+  done
+}
+
+# Execute next init
+exec_next_init() {
+  local init_path
+  if [[ -f "$nextInitFile" && -s "$nextInitFile" ]]; then
+    init_path=$(cat "$nextInitFile" | xargs)
+  else
+    init_path="$defaultNextInit"
+  fi
+
+  echo "Executing next init: $init_path"
+  exec "$init_path"
+}
+
+# Main execution
+run_scripts "$scriptsPath"
+exec_next_init
